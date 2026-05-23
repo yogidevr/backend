@@ -205,3 +205,9 @@ Route::middleware(['auth.api', 'activity.log'])->group(function (): void {
         Route::apiResource('retur-rusak', WarehouseReturController::class)->only(['store', 'update', 'destroy']);
     });
 });
+// ============================ TEST API ===========================
+Route::get('/test', function () {
+    return response()->json([
+        'message' => 'ok'
+    ]);
+});
