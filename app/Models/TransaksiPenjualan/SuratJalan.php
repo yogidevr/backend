@@ -4,6 +4,7 @@ namespace App\Models\TransaksiPenjualan;
 
 use App\Models\MasterData\Armada;
 use App\Models\MasterData\Karyawan;
+use App\Models\MasterData\Perusahaan;
 use App\Models\MasterData\Sppg;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -23,6 +24,7 @@ class SuratJalan extends Model
         'sppg_id',
         'armada_id',
         'driver_id',
+        'perusahaan_id',
         'status',
     ];
 
@@ -35,6 +37,7 @@ class SuratJalan extends Model
         'armada',
         'no_pol',
         'nama_driver',
+        'nama_perusahaan',
     ];
 
     public function items(): HasMany
@@ -57,6 +60,11 @@ class SuratJalan extends Model
         return $this->belongsTo(Karyawan::class, 'driver_id');
     }
 
+    public function perusahaanRef(): BelongsTo
+    {
+        return $this->belongsTo(Perusahaan::class, 'perusahaan_id');
+    }
+
     public function getNamaSppgAttribute(): ?string
     {
         return $this->sppg?->nama_sppg;
@@ -75,5 +83,10 @@ class SuratJalan extends Model
     public function getNamaDriverAttribute(): ?string
     {
         return $this->driver?->nama;
+    }
+
+    public function getNamaPerusahaanAttribute(): ?string
+    {
+        return $this->perusahaanRef?->nama_perusahaan;
     }
 }

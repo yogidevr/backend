@@ -156,11 +156,13 @@ Route::middleware(['auth.api', 'activity.log'])->group(function (): void {
         Route::get('penjualan/{penjualan}/items', [PenjualanItemController::class, 'index']);
         Route::get('penjualan/{penjualan}/items/{item}', [PenjualanItemController::class, 'show']);
 
+        Route::get('surat-jalan/opsi-perusahaan', [SuratJalanController::class, 'opsiPerusahaan']);
         Route::apiResource('surat-jalan', SuratJalanController::class)->only(['index', 'show']);
         Route::get('surat-jalan/{suratJalan}/opsi-barang', [SuratJalanItemController::class, 'opsiBarang']);
         Route::get('surat-jalan/{suratJalan}/items', [SuratJalanItemController::class, 'index']);
         Route::get('surat-jalan/{suratJalan}/items/{item}', [SuratJalanItemController::class, 'show']);
 
+        Route::get('tanda-terima/opsi-perusahaan', [TandaTerimaController::class, 'opsiPerusahaan']);
         Route::apiResource('tanda-terima', TandaTerimaController::class)->only(['index', 'show']);
         Route::get('tanda-terima/{tandaTerima}/opsi-barang', [TandaTerimaItemController::class, 'opsiBarang']);
         Route::get('tanda-terima/{tandaTerima}/items', [TandaTerimaItemController::class, 'index']);

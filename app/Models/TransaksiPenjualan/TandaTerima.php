@@ -4,6 +4,7 @@ namespace App\Models\TransaksiPenjualan;
 
 use App\Models\MasterData\Armada;
 use App\Models\MasterData\Karyawan;
+use App\Models\MasterData\Perusahaan;
 use App\Models\MasterData\Sppg;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,6 +26,7 @@ class TandaTerima extends Model
         'armada_id',
         'akuntan_id',
         'driver_id',
+        'perusahaan_id',
         'status',
     ];
 
@@ -38,6 +40,7 @@ class TandaTerima extends Model
         'no_pol',
         'nama_akuntan',
         'nama_driver',
+        'nama_perusahaan',
     ];
 
     public function items(): HasMany
@@ -70,6 +73,11 @@ class TandaTerima extends Model
         return $this->belongsTo(SuratJalan::class, 'nomor_surat_jalan', 'nomor_surat_jalan');
     }
 
+    public function perusahaanRef(): BelongsTo
+    {
+        return $this->belongsTo(Perusahaan::class, 'perusahaan_id');
+    }
+
     public function getNamaSppgAttribute(): ?string
     {
         return $this->sppg?->nama_sppg;
@@ -93,5 +101,10 @@ class TandaTerima extends Model
     public function getNamaDriverAttribute(): ?string
     {
         return $this->driver?->nama;
+    }
+
+    public function getNamaPerusahaanAttribute(): ?string
+    {
+        return $this->perusahaanRef?->nama_perusahaan;
     }
 }
