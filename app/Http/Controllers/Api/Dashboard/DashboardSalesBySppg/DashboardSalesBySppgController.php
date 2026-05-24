@@ -33,7 +33,7 @@ class DashboardSalesBySppgController extends Controller
             $tanggalAkhir
         );
 
-        $salesBySppg = Cache::tags([CacheInvalidation::TAG_DASHBOARD_SALES_BY_SPPG])->remember($cacheKey, now()->addMinutes(5), function () use ($tanggalAwal, $tanggalAkhir): array {
+      $salesBySppg = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($tanggalAwal, $tanggalAkhir): array {
             $rows = SuratJalanItem::query()
                 ->selectRaw('surat_jalan.sppg_id, sppg.nama_sppg, SUM(penjualan_items.total_harga) as total_penjualan')
                 ->join('surat_jalan', 'surat_jalan.id', '=', 'surat_jalan_items.surat_jalan_id')

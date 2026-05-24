@@ -37,7 +37,7 @@ class DashboardSummaryController extends Controller
             $tanggalAkhir
         );
 
-        $summary = Cache::tags([CacheInvalidation::TAG_DASHBOARD_SUMMARY])->remember($cacheKey, now()->addMinutes(5), function () use ($tanggalAwal, $tanggalAkhir): array {
+$summary = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($tanggalAwal, $tanggalAkhir): array{
             $omsetPeriode = (float) Penjualan::query()
                 ->whereBetween('tanggal', [$tanggalAwal, $tanggalAkhir])
                 ->where('status', 'selesai')
