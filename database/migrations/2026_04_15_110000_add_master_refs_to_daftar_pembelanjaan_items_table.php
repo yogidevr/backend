@@ -9,16 +9,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (! Schema::hasTable('daftar_pembelanjaan_items')) {
+        if (!Schema::hasTable('daftar_pembelanjaan_items')) {
             return;
         }
 
         Schema::table('daftar_pembelanjaan_items', function (Blueprint $table): void {
-            if (! Schema::hasColumn('daftar_pembelanjaan_items', 'produk_id')) {
+            if (!Schema::hasColumn('daftar_pembelanjaan_items', 'produk_id')) {
                 $this->addMatchingIntegerColumn($table, 'produk', 'produk_id', 'nama_barang');
             }
 
-            if (! Schema::hasColumn('daftar_pembelanjaan_items', 'kategori_id')) {
+            if (!Schema::hasColumn('daftar_pembelanjaan_items', 'kategori_id')) {
                 $this->addMatchingIntegerColumn($table, 'kategori', 'kategori_id', 'satuan');
             }
         });
@@ -26,7 +26,9 @@ return new class extends Migration
         $produkMap = DB::table('produk')
             ->select(['id', 'nama'])
             ->get()
-            ->mapWithKeys(fn ($row) => [mb_strtolower((string) $row->nama) => $row->id]);
+            ->mapWithKeys(fn ($row) => [
+                mb_strtolower((string) $row->nama) => $row->id
+            ]);
 
         $kategoriMap = DB::table('kategori')
             ->select(['id', 'kode', 'nama_satuan'])
@@ -46,14 +48,22 @@ return new class extends Migration
             });
 
         DB::table('daftar_pembelanjaan_items')
-            ->select(['id', 'nama_barang', 'satuan', 'produk_id', 'kategori_id'])
+            ->select([
+                'id',
+                'nama_barang',
+                'satuan',
+                'produk_id',
+                'kategori_id'
+            ])
             ->orderBy('id')
             ->get()
             ->each(function ($item) use ($produkMap, $kategoriMap): void {
                 $updates = [];
 
                 if ($item->produk_id === null) {
-                    $produkId = $produkMap[mb_strtolower((string) $item->nama_barang)] ?? null;
+                    $produkId = $produkMap[
+                        mb_strtolower((string) $item->nama_barang)
+                    ] ?? null;
 
                     if ($produkId !== null) {
                         $updates['produk_id'] = $produkId;
@@ -61,7 +71,9 @@ return new class extends Migration
                 }
 
                 if ($item->kategori_id === null) {
-                    $kategoriId = $kategoriMap[mb_strtolower((string) $item->satuan)] ?? null;
+                    $kategoriId = $kategoriMap[
+                        mb_strtolower((string) $item->satuan)
+                    ] ?? null;
 
                     if ($kategoriId !== null) {
                         $updates['kategori_id'] = $kategoriId;
@@ -78,7 +90,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasTable('daftar_pembelanjaan_items')) {
+        if (!Schema::hasTable('daftar_pembelanjaan_items')) {
             return;
         }
 
@@ -102,35 +114,57 @@ return new class extends Migration
         $isUnsigned = $this->isIntegerColumnUnsigned($referenceTable);
 
         $definition = match ($columnType) {
-            'bigint' => $isUnsigned ? $table->unsignedBigInteger($column) : $table->bigInteger($column),
-            'mediumint' => $isUnsigned ? $table->unsignedMediumInteger($column) : $table->mediumInteger($column),
-            'smallint' => $isUnsigned ? $table->unsignedSmallInteger($column) : $table->smallInteger($column),
-            'tinyint' => $isUnsigned ? $table->unsignedTinyInteger($column) : $table->tinyInteger($column),
-            default => $isUnsigned ? $table->unsignedInteger($column) : $table->integer($column),
+            'bigint' => $isUnsigned
+                ? $table->unsignedBigInteger($column)
+                : $table->bigInteger($column),
+
+            'mediumint' => $isUnsigned
+                ? $table->unsignedMediumInteger($column)
+                : $table->mediumInteger($column),
+
+            'smallint' => $isUnsigned
+                ? $table->unsignedSmallInteger($column)
+                : $table->smallInteger($column),
+
+            'tinyint' => $isUnsigned
+                ? $table->unsignedTinyInteger($column)
+                : $table->tinyInteger($column),
+
+            default => $isUnsigned
+                ? $table->unsignedInteger($column)
+                : $table->integer($column),
         };
 
         $definition->nullable()->after($after);
-        $table->foreign($column)->references('id')->on($referenceTable)->nullOnDelete();
+
+        $table->foreign($column)
+            ->references('id')
+            ->on($referenceTable)
+            ->nullOnDelete();
     }
 
     private function getIntegerColumnType(string $table): string
     {
         $driver = DB::getDriverName();
 
-        if ($driver === 'sqlite') {
+        // PostgreSQL & SQLite
+        if (in_array($driver, ['sqlite', 'pgsql'])) {
             return 'integer';
         }
 
         $type = Schema::getColumnType($table, 'id');
 
-        return is_string($type) ? strtolower($type) : 'int';
+        return is_string($type)
+            ? strtolower($type)
+            : 'int';
     }
 
     private function isIntegerColumnUnsigned(string $table): bool
     {
         $driver = DB::getDriverName();
 
-        if ($driver === 'sqlite') {
+        // PostgreSQL dan SQLite tidak punya unsigned integer
+        if (in_array($driver, ['sqlite', 'pgsql'])) {
             return false;
         }
 
@@ -141,6 +175,7 @@ return new class extends Migration
             ->where('COLUMN_NAME', 'id')
             ->value('COLUMN_TYPE');
 
-        return is_string($columnType) && str_contains(strtolower($columnType), 'unsigned');
+        return is_string($columnType)
+            && str_contains(strtolower($columnType), 'unsigned');
     }
 };
