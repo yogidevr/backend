@@ -193,8 +193,8 @@ class UserController extends Controller
     private function normalizeRole(string $role): string
     {
         return in_array(strtolower(trim($role)), ['superadmin', 'super_admin'], true)
-            ? 'superadmin'
-            : 'user';
+            ? 'super_admin'
+            : 'admin';
     }
 
     private function countSuperAdmins(): int

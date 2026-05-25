@@ -107,7 +107,7 @@ class User extends Authenticatable
     {
         return match (strtolower(trim((string) $this->role))) {
             'superadmin', 'super_admin' => 'superadmin',
-            default => 'user',
+            default => 'admin',
         };
     }
 }
