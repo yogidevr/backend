@@ -20,8 +20,8 @@ class ActivityLogController extends Controller
         ]);
 
         $search = $filters['search'] ?? null;
-        $sortField = $filters['sort_field'] ?? 'created_at';
-        $sortOrder = $filters['sort_order'] ?? 'desc';
+        $sortField = $filters['sort_field'] ?? 'id';
+        $sortOrder = $filters['sort_order'] ?? 'asc';
         $perPage = $filters['per_page'] ?? 10;
 
         $logs = ActivityLog::query()

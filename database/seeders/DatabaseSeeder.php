@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Permission;
 use App\Models\User;
+use App\Support\PermissionCatalog;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Schema;
@@ -68,22 +69,7 @@ class DatabaseSeeder extends Seeder
             return;
         }
 
-        $adminPermissionCodes = [
-            'dashboard.view',
-            'master.view',
-            'master.manage',
-            'pembelian.view',
-            'pembelian.manage',
-            'warehouse.view',
-            'warehouse.manage',
-            'penjualan.view',
-            'penjualan.manage',
-            'keuangan.view',
-            'keuangan.manage',
-            'laporan.view',
-            'export.pdf',
-            'delete.data',
-        ];
+        $adminPermissionCodes = PermissionCatalog::defaultAdminCodes();
 
         $adminPermissionIds = Permission::query()
             ->whereIn('code', $adminPermissionCodes)

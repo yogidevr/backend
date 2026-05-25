@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -18,10 +19,7 @@ class AuthController extends Controller
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
-            'role' => ['required', 'string'],
         ]);
-
-        $role = $this->normalizeRole($credentials['role']);
         $throttleKey = $this->throttleKey($request, $credentials['email']);
 
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
@@ -39,14 +37,6 @@ class AuthController extends Controller
 
             throw ValidationException::withMessages([
                 'email' => ['Email atau password tidak valid.'],
-            ]);
-        }
-
-        if ($this->normalizeRole((string) $user->role) !== $role) {
-            RateLimiter::hit($throttleKey, 300);
-
-            throw ValidationException::withMessages([
-                'role' => ['Role login tidak sesuai dengan akun.'],
             ]);
         }
 
@@ -81,6 +71,37 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Logout berhasil.',
+        ]);
+    }
+
+    public function updateProfile(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $validated = $request->validate([
+            'nama' => ['required', 'string', 'max:100'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $user->fill([
+            'nama' => $validated['nama'],
+            'name' => $validated['nama'],
+            'email' => $validated['email'],
+        ]);
+
+        if (! empty($validated['password'])) {
+            $user->password = $validated['password'];
+            $user->api_token = null;
+            $user->api_token_expires_at = null;
+        }
+
+        $user->save();
+
+        return response()->json([
+            'message' => 'Profil berhasil diperbarui.',
+            'user' => $this->formatUser($user->fresh()),
         ]);
     }
 

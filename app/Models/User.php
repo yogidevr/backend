@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PermissionCatalog;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -27,6 +28,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'role_label',
         'api_token',
         'api_token_expires_at',
     ];
@@ -98,8 +100,17 @@ class User extends Authenticatable
             return true;
         }
 
+        if ($this->permissions()->where('code', $permissionCode)->exists()) {
+            return true;
+        }
+
+        $legacyFallbackCodes = PermissionCatalog::legacyFallback($permissionCode);
+        if ($legacyFallbackCodes === []) {
+            return false;
+        }
+
         return $this->permissions()
-            ->where('code', $permissionCode)
+            ->whereIn('code', $legacyFallbackCodes)
             ->exists();
     }
 

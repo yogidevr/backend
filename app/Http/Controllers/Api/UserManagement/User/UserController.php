@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\UserManagement\User;
 
 use App\Http\Controllers\Controller;
+use App\Models\Permission;
 use App\Models\User;
+use App\Support\PermissionCatalog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -55,24 +57,32 @@ class UserController extends Controller
         $validated = $request->validate([
             'nama' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'role' => ['required', 'string', Rule::in(['superadmin', 'super_admin', 'user', 'admin'])],
+            'role' => ['required', 'string', 'max:100'],
             'password' => ['required', 'string', 'min:8'],
             'permission_ids' => ['nullable', 'array'],
             'permission_ids.*' => ['integer', 'exists:permissions,id'],
         ]);
 
-        $role = $this->normalizeRole($validated['role']);
+        $roleLabel = trim((string) $validated['role']);
+        $roleType = $this->normalizeRole($roleLabel);
+        $roleToStore = $roleType === 'superadmin' ? 'super_admin' : 'admin';
+        $roleLabelToStore = $roleType === 'superadmin' ? 'Super Admin' : $roleLabel;
 
         $user = User::query()->create([
             'nama' => $validated['nama'],
             'name' => $validated['nama'],
             'email' => $validated['email'],
-            'role' => $role,
+            'role' => $roleToStore,
+            'role_label' => $roleLabelToStore,
             'password' => $validated['password'],
         ]);
 
-        if ($role !== 'superadmin') {
-            $user->permissions()->sync($validated['permission_ids'] ?? []);
+        if ($roleType !== 'superadmin') {
+            $permissionIds = array_key_exists('permission_ids', $validated)
+                ? ($validated['permission_ids'] ?? [])
+                : $this->defaultAdminPermissionIds();
+
+            $user->permissions()->sync($permissionIds);
         }
 
         $user->load(['permissions' => fn ($permissionQuery) => $permissionQuery
@@ -102,14 +112,17 @@ class UserController extends Controller
         $validated = $request->validate([
             'nama' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
-            'role' => ['required', 'string', Rule::in(['superadmin', 'super_admin', 'user', 'admin'])],
+            'role' => ['required', 'string', 'max:100'],
             'password' => ['nullable', 'string', 'min:8'],
             'permission_ids' => ['nullable', 'array'],
             'permission_ids.*' => ['integer', 'exists:permissions,id'],
         ]);
 
-        $newRole = $this->normalizeRole($validated['role']);
+        $newRoleLabel = trim((string) $validated['role']);
+        $newRole = $this->normalizeRole($newRoleLabel);
         $currentRole = $user->normalizedRole();
+        $roleToStore = $newRole === 'superadmin' ? 'super_admin' : 'admin';
+        $roleLabelToStore = $newRole === 'superadmin' ? 'Super Admin' : $newRoleLabel;
 
         if ($currentRole === 'superadmin' && $newRole !== 'superadmin' && $this->countSuperAdmins() <= 1) {
             return response()->json([
@@ -121,7 +134,8 @@ class UserController extends Controller
             'nama' => $validated['nama'],
             'name' => $validated['nama'],
             'email' => $validated['email'],
-            'role' => $newRole,
+            'role' => $roleToStore,
+            'role_label' => $roleLabelToStore,
         ]);
 
         if (!empty($validated['password'])) {
@@ -135,7 +149,15 @@ class UserController extends Controller
         if ($newRole === 'superadmin') {
             $user->permissions()->detach();
         } else {
-            $user->permissions()->sync($validated['permission_ids'] ?? []);
+            if (array_key_exists('permission_ids', $validated)) {
+                $permissionIds = $validated['permission_ids'] ?? [];
+            } elseif ($currentRole === 'superadmin') {
+                $permissionIds = $this->defaultAdminPermissionIds();
+            } else {
+                $permissionIds = $user->permissions()->pluck('permissions.id')->all();
+            }
+
+            $user->permissions()->sync($permissionIds);
         }
 
         $user->load(['permissions' => fn ($permissionQuery) => $permissionQuery
@@ -179,7 +201,7 @@ class UserController extends Controller
             'id' => $user->id,
             'nama' => $user->nama ?: $user->name,
             'email' => $user->email,
-            'role' => $user->normalizedRole(),
+            'role' => $this->displayRole((string) ($user->role_label ?: $user->role)),
             'permissions' => $user->permissions->map(fn ($permission) => [
                 'id' => $permission->id,
                 'code' => $permission->code,
@@ -192,9 +214,24 @@ class UserController extends Controller
 
     private function normalizeRole(string $role): string
     {
-        return in_array(strtolower(trim($role)), ['superadmin', 'super_admin'], true)
-            ? 'super_admin'
+        return in_array(strtolower(trim($role)), ['superadmin', 'super_admin', 'super admin'], true)
+            ? 'superadmin'
             : 'admin';
+    }
+
+    private function displayRole(string $role): string
+    {
+        $normalized = strtolower(trim($role));
+
+        if (in_array($normalized, ['superadmin', 'super_admin', 'super admin'], true)) {
+            return 'Super Admin';
+        }
+
+        if (in_array($normalized, ['admin', 'user'], true)) {
+            return 'Admin';
+        }
+
+        return trim($role);
     }
 
     private function countSuperAdmins(): int
@@ -202,5 +239,18 @@ class UserController extends Controller
         return User::query()
             ->whereIn('role', ['superadmin', 'super_admin'])
             ->count();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function defaultAdminPermissionIds(): array
+    {
+        $defaultCodes = PermissionCatalog::defaultAdminCodes();
+
+        return Permission::query()
+            ->whereIn('code', $defaultCodes)
+            ->pluck('id')
+            ->all();
     }
 }

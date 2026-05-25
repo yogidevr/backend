@@ -22,7 +22,7 @@ class WilayahController extends Controller
         ]);
 
         $search = $filters['search'] ?? null;
-        $sortField = $filters['sort_field'] ?? 'nama';
+        $sortField = $filters['sort_field'] ?? 'id';
         $sortOrder = $filters['sort_order'] ?? 'asc';
         $perPage = $filters['per_page'] ?? 10;
 
