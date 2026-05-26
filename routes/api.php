@@ -328,7 +328,6 @@ Route::middleware(['auth.api', 'activity.log'])->group(function (): void {
     });
 
     Route::middleware('permission:penjualan.surat_jalan.view')->group(function (): void {
-        Route::get('surat-jalan/opsi-perusahaan', [SuratJalanController::class, 'opsiPerusahaan']);
         Route::apiResource('surat-jalan', SuratJalanController::class)->only(['index', 'show']);
         Route::get('surat-jalan/{suratJalan}/opsi-barang', [SuratJalanItemController::class, 'opsiBarang']);
         Route::get('surat-jalan/{suratJalan}/items', [SuratJalanItemController::class, 'index']);
@@ -348,7 +347,6 @@ Route::middleware(['auth.api', 'activity.log'])->group(function (): void {
     });
 
     Route::middleware('permission:penjualan.tanda_terima.view')->group(function (): void {
-        Route::get('tanda-terima/opsi-perusahaan', [TandaTerimaController::class, 'opsiPerusahaan']);
         Route::apiResource('tanda-terima', TandaTerimaController::class)->only(['index', 'show']);
         Route::get('tanda-terima/{tandaTerima}/opsi-barang', [TandaTerimaItemController::class, 'opsiBarang']);
         Route::get('tanda-terima/{tandaTerima}/items', [TandaTerimaItemController::class, 'index']);
@@ -369,7 +367,6 @@ Route::middleware(['auth.api', 'activity.log'])->group(function (): void {
 
     Route::middleware('permission:penjualan.invoice_penjualan.view')->group(function (): void {
         Route::get('invoice-penjualan/opsi-sppg', [InvoicePenjualanController::class, 'opsiSppgByTanggalKirim']);
-        Route::get('invoice-penjualan/opsi-accounting', [InvoicePenjualanController::class, 'opsiAccounting']);
         Route::get('invoice-penjualan/opsi-bank-rekening', [InvoicePenjualanController::class, 'opsiBankRekening']);
         Route::get('invoice-penjualan/opsi-perusahaan', [InvoicePenjualanController::class, 'opsiPerusahaan']);
         Route::apiResource('invoice-penjualan', InvoicePenjualanController::class)->only(['index', 'show']);

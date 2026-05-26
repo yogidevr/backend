@@ -36,6 +36,7 @@ class SuratJalanItemController extends Controller
         $currentPage = max((int) $request->query('page', 1), 1);
 
         $items = $suratJalan->items()
+            ->with('penjualanItem.perusahaan')
             ->when($search, function ($query, string $keyword): void {
                 $query->where(function ($subQuery) use ($keyword): void {
                     $subQuery
@@ -74,7 +75,9 @@ class SuratJalanItemController extends Controller
 
         return response()->json([
             'message' => 'Data item surat jalan berhasil diambil.',
-            'data' => $paginatedItems->items(),
+            'data' => collect($paginatedItems->items())
+                ->map(fn (SuratJalanItem $item): array => $this->serializeItem($item))
+                ->values(),
             'meta' => [
                 'current_page' => $paginatedItems->currentPage(),
                 'last_page' => $paginatedItems->lastPage(),
@@ -94,7 +97,7 @@ class SuratJalanItemController extends Controller
 
         return response()->json([
             'message' => 'Item surat jalan berhasil ditambahkan.',
-            'data' => $item,
+            'data' => $this->serializeItem($item),
         ], 201);
     }
 
@@ -105,7 +108,7 @@ class SuratJalanItemController extends Controller
 
         return response()->json([
             'message' => 'Detail item surat jalan berhasil diambil.',
-            'data' => $item,
+            'data' => $this->serializeItem($item),
         ]);
     }
 
@@ -118,7 +121,7 @@ class SuratJalanItemController extends Controller
 
         return response()->json([
             'message' => 'Item surat jalan berhasil diperbarui.',
-            'data' => $item,
+            'data' => $this->serializeItem($item),
         ]);
     }
 
@@ -182,7 +185,32 @@ class SuratJalanItemController extends Controller
 
         $item->save();
 
-        return $item->fresh();
+        return $item->fresh(['penjualanItem.perusahaan']);
+    }
+
+    private function serializeItem(SuratJalanItem $item): array
+    {
+        $item->loadMissing('penjualanItem.perusahaan');
+        $perusahaan = $item->penjualanItem?->perusahaan;
+
+        return [
+            'id' => $item->id,
+            'surat_jalan_id' => $item->surat_jalan_id,
+            'penjualan_item_id' => $item->penjualan_item_id,
+            'nama_barang' => $item->nama_barang,
+            'qty' => $item->qty,
+            'satuan' => $item->satuan,
+            'keterangan' => $item->keterangan,
+            'perusahaan_id' => $perusahaan?->id,
+            'perusahaan' => $perusahaan ? [
+                'id' => $perusahaan->id,
+                'nama_perusahaan' => $perusahaan->nama_perusahaan,
+                'alamat' => $perusahaan->alamat,
+                'nama_pic' => $perusahaan->nama_pic,
+                'tema_invoice' => $perusahaan->tema_invoice,
+                'logo_url' => $perusahaan->logo_url,
+            ] : null,
+        ];
     }
 
     private function ensureItemBelongsToSuratJalan(SuratJalan $suratJalan, SuratJalanItem $item): void
@@ -217,7 +245,7 @@ class SuratJalanItemController extends Controller
         }
 
         $sourceItems = $this->queryMatchingPenjualan($suratJalan)
-            ->with('items')
+            ->with('items.perusahaan')
             ->orderBy('id')
             ->get()
             ->flatMap(fn (Penjualan $penjualan) => $this->resolvePenjualanSourceItems($penjualan))

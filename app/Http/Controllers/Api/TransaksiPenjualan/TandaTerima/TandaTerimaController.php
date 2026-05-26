@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\TransaksiPenjualan\TandaTerima;
 
 use App\Http\Controllers\Controller;
 use App\Support\CacheInvalidation;
-use App\Models\MasterData\Perusahaan;
 use App\Models\TransaksiPembelian\OrderPenawaranItem;
 use App\Models\TransaksiPenjualan\Penjualan;
 use App\Models\TransaksiPenjualan\SuratJalan;
@@ -13,8 +12,6 @@ use App\Models\TransaksiPenjualan\TandaTerima;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -35,14 +32,13 @@ class TandaTerimaController extends Controller
         $perPage = $filters['per_page'] ?? 10;
 
         $records = TandaTerima::query()
-            ->with(['sppg:id,nama_sppg', 'armadaRef:id,nama_unit,no_pol', 'akuntan:id,nama', 'driver:id,nama', 'perusahaanRef:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path'])
+            ->with(['sppg:id,nama_sppg', 'armadaRef:id,nama_unit,no_pol', 'akuntan:id,nama', 'driver:id,nama'])
             ->when($search, function ($query, string $keyword): void {
                 $query->where(function ($subQuery) use ($keyword): void {
                     $subQuery
                         ->where('nomor_tanda_terima', 'like', '%'.$keyword.'%')
                         ->orWhere('nomor_surat_jalan', 'like', '%'.$keyword.'%')
                         ->orWhere('no_po', 'like', '%'.$keyword.'%')
-                        ->orWhereHas('perusahaanRef', fn ($perusahaanQuery) => $perusahaanQuery->where('nama_perusahaan', 'like', '%'.$keyword.'%'))
                         ->orWhereHas('sppg', fn ($sppgQuery) => $sppgQuery->where('nama_sppg', 'like', '%'.$keyword.'%'))
                         ->orWhereHas('akuntan', fn ($karyawanQuery) => $karyawanQuery->where('nama', 'like', '%'.$keyword.'%'))
                         ->orWhereHas('driver', fn ($karyawanQuery) => $karyawanQuery->where('nama', 'like', '%'.$keyword.'%'));
@@ -76,7 +72,6 @@ class TandaTerimaController extends Controller
     {
         $payload = $request->validate([
             'tanggal' => ['required', 'date'],
-            'perusahaan_id' => ['required', 'integer', 'exists:perusahaan,id'],
         ]);
 
         $suratJalanRecords = SuratJalan::query()
@@ -92,10 +87,10 @@ class TandaTerimaController extends Controller
         }
 
         $records = $suratJalanRecords
-            ->map(function (SuratJalan $suratJalan) use ($payload): TandaTerima {
+            ->map(function (SuratJalan $suratJalan): TandaTerima {
                 $this->syncSuratJalanItemsFromPenjualan($suratJalan);
 
-                return $this->syncFromSuratJalan($suratJalan, (int) $payload['perusahaan_id']);
+                return $this->syncFromSuratJalan($suratJalan);
             })
             ->values();
         CacheInvalidation::flushLabaRugiTransaksional();
@@ -104,18 +99,6 @@ class TandaTerimaController extends Controller
             'message' => 'Data tanda terima berhasil disinkronkan dari surat jalan.',
             'data' => $records->map(fn (TandaTerima $tandaTerima): array => $this->serializeTandaTerima($tandaTerima))->values(),
         ], 201);
-    }
-
-    public function opsiPerusahaan(): JsonResponse
-    {
-        $options = Perusahaan::query()
-            ->orderBy('nama_perusahaan')
-            ->get(['id', 'nama_perusahaan', 'alamat', 'nama_pic', 'tema_invoice', 'logo_path']);
-
-        return response()->json([
-            'message' => 'Opsi perusahaan tanda terima berhasil diambil.',
-            'data' => $options,
-        ]);
     }
 
     public function show(TandaTerima $tandaTerima): JsonResponse
@@ -135,12 +118,11 @@ class TandaTerimaController extends Controller
             'armadaRef:id,nama_unit,no_pol',
             'akuntan:id,nama',
             'driver:id,nama',
-            'perusahaanRef:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path',
             'items.penjualanItem',
         ]);
         return response()->json([
             'message' => 'Detail tanda terima berhasil diambil.',
-            'data' => $this->serializeTandaTerima($tandaTerima, true),
+            'data' => $this->serializeTandaTerima($tandaTerima),
         ]);
     }
 
@@ -152,7 +134,7 @@ class TandaTerimaController extends Controller
         return response()->json([
             'message' => 'Data tanda terima berhasil diperbarui.',
             'data' => $this->serializeTandaTerima(
-                $tandaTerima->fresh(['sppg:id,nama_sppg', 'armadaRef:id,nama_unit,no_pol', 'akuntan:id,nama', 'driver:id,nama', 'perusahaanRef:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path'])
+                $tandaTerima->fresh(['sppg:id,nama_sppg', 'armadaRef:id,nama_unit,no_pol', 'akuntan:id,nama', 'driver:id,nama'])
             ),
         ]);
     }
@@ -183,7 +165,6 @@ class TandaTerimaController extends Controller
             'armada_id' => ['nullable', 'integer', 'exists:armada,id'],
             'akuntan_id' => ['nullable', 'integer', 'exists:karyawan,id'],
             'driver_id' => ['nullable', 'integer', 'exists:karyawan,id'],
-            'perusahaan_id' => ['nullable', 'integer', 'exists:perusahaan,id'],
             'status' => ['required', Rule::in(['draft', 'selesai', 'batal'])],
         ]);
 
@@ -228,7 +209,7 @@ class TandaTerimaController extends Controller
         return $payload;
     }
 
-    private function syncFromSuratJalan(SuratJalan $suratJalan, ?int $perusahaanId = null): TandaTerima
+    private function syncFromSuratJalan(SuratJalan $suratJalan): TandaTerima
     {
         $record = TandaTerima::query()
             ->where('nomor_surat_jalan', $suratJalan->nomor_surat_jalan)
@@ -253,9 +234,7 @@ class TandaTerimaController extends Controller
         $record->sppg_id = $suratJalan->sppg_id;
         $record->armada_id = $suratJalan->armada_id;
         $record->driver_id = $suratJalan->driver_id;
-        if ($perusahaanId !== null) {
-            $record->perusahaan_id = $perusahaanId;
-        }
+        $record->perusahaan_id = null;
         $record->save();
 
         $this->syncItemsFromSuratJalan($record, $suratJalan);
@@ -265,7 +244,6 @@ class TandaTerimaController extends Controller
             'armadaRef:id,nama_unit,no_pol',
             'akuntan:id,nama',
             'driver:id,nama',
-            'perusahaanRef:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path',
             'items',
         ]);
     }
@@ -407,28 +385,8 @@ class TandaTerimaController extends Controller
         return $nomor;
     }
 
-    private function resolvePerusahaanLogoDataUrl(?string $logoPath): ?string
+    private function serializeTandaTerima(TandaTerima $tandaTerima): array
     {
-        if (! $logoPath || ! Storage::disk('public')->exists($logoPath)) {
-            return null;
-        }
-
-        $extension = Str::lower(pathinfo($logoPath, PATHINFO_EXTENSION));
-        $mime = match ($extension) {
-            'jpg', 'jpeg' => 'image/jpeg',
-            'webp' => 'image/webp',
-            default => 'image/png',
-        };
-
-        $binary = Storage::disk('public')->get($logoPath);
-
-        return 'data:'.$mime.';base64,'.base64_encode($binary);
-    }
-
-    private function serializeTandaTerima(TandaTerima $tandaTerima, bool $includeLogoData = false): array
-    {
-        $perusahaan = $tandaTerima->perusahaanRef;
-
         return [
             'id' => $tandaTerima->id,
             'nomor_tanda_terima' => $tandaTerima->nomor_tanda_terima,
@@ -445,16 +403,6 @@ class TandaTerimaController extends Controller
             'armadaRef' => $tandaTerima->armadaRef ? ['id' => $tandaTerima->armadaRef->id, 'nama_unit' => $tandaTerima->armadaRef->nama_unit, 'no_pol' => $tandaTerima->armadaRef->no_pol] : null,
             'akuntan' => $tandaTerima->akuntan ? ['id' => $tandaTerima->akuntan->id, 'nama' => $tandaTerima->akuntan->nama] : null,
             'driver' => $tandaTerima->driver ? ['id' => $tandaTerima->driver->id, 'nama' => $tandaTerima->driver->nama] : null,
-            'perusahaanRef' => $perusahaan ? [
-                'id' => $perusahaan->id,
-                'nama_perusahaan' => $perusahaan->nama_perusahaan,
-                'alamat' => $perusahaan->alamat,
-                'nama_pic' => $perusahaan->nama_pic,
-                'tema_invoice' => $perusahaan->tema_invoice ?? 'theme_01',
-                'logo_url' => $perusahaan->logo_url,
-            ] : null,
-            'perusahaan_tema_invoice' => $perusahaan?->tema_invoice ?? 'theme_01',
-            'perusahaan_logo_data_url' => $includeLogoData ? $this->resolvePerusahaanLogoDataUrl($perusahaan?->getRawOriginal('logo_path')) : null,
             'items' => $tandaTerima->relationLoaded('items')
                 ? $tandaTerima->items->map(fn ($item) => [
                     'id' => $item->id,

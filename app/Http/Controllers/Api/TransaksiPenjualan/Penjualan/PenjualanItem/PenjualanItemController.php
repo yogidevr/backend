@@ -35,7 +35,7 @@ class PenjualanItemController extends Controller
         $currentPage = max((int) $request->query('page', 1), 1);
 
         $items = $penjualan->items()
-            ->with('gudang')
+            ->with(['gudang', 'perusahaan:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path'])
             ->when($search, function ($query, string $keyword): void {
                 $query->where('nama_barang', 'like', '%'.$keyword.'%');
             })
@@ -59,6 +59,8 @@ class PenjualanItemController extends Controller
                         'order_penawaran_item_id' => $item->id,
                         'produk_id' => $item->produk_id,
                         'gudang_id' => null,
+                        'perusahaan_id' => null,
+                        'perusahaan' => null,
                         'gudang' => null,
                         'nama_barang' => $item->nama_barang,
                         'qty' => $item->qty,
@@ -136,7 +138,7 @@ class PenjualanItemController extends Controller
 
         return response()->json([
             'message' => 'Item penjualan berhasil ditambahkan.',
-            'data' => $this->serializeItem($item->load('gudang')),
+            'data' => $this->serializeItem($item->load(['gudang', 'perusahaan:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path'])),
         ], 201);
     }
 
@@ -146,7 +148,7 @@ class PenjualanItemController extends Controller
 
         return response()->json([
             'message' => 'Detail item penjualan berhasil diambil.',
-            'data' => $this->serializeItem($item->load('gudang')),
+            'data' => $this->serializeItem($item->load(['gudang', 'perusahaan:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path'])),
         ]);
     }
 
@@ -165,7 +167,7 @@ class PenjualanItemController extends Controller
 
         return response()->json([
             'message' => 'Item penjualan berhasil diperbarui.',
-            'data' => $this->serializeItem($item->load('gudang')),
+            'data' => $this->serializeItem($item->load(['gudang', 'perusahaan:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path'])),
         ]);
     }
 
@@ -232,6 +234,7 @@ class PenjualanItemController extends Controller
         $payload = $request->validate([
             'order_penawaran_item_id' => ['required', 'integer', 'exists:order_penawaran_items,id'],
             'gudang_id' => ['required', 'integer', 'exists:gudang,id'],
+            'perusahaan_id' => ['required', 'integer', 'exists:perusahaan,id'],
             'qty' => ['required', 'numeric', 'gt:0'],
         ]);
 
@@ -264,6 +267,7 @@ class PenjualanItemController extends Controller
             'order_penawaran_item_id' => $sourceItem->id,
             'produk_id' => $sourceItem->produk_id,
             'gudang_id' => $payload['gudang_id'],
+            'perusahaan_id' => $payload['perusahaan_id'],
             'nama_barang' => $sourceItem->nama_barang,
             'qty' => $payload['qty'],
             'satuan' => $sourceItem->satuan,
@@ -273,7 +277,10 @@ class PenjualanItemController extends Controller
 
         $item->save();
 
-        return $item->fresh(['gudang']);
+        return $item->fresh([
+            'gudang',
+            'perusahaan:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path',
+        ]);
     }
 
     private function refreshParentTotal(Penjualan $penjualan): void
@@ -302,6 +309,17 @@ class PenjualanItemController extends Controller
                 ? [
                     'id' => $item->gudang->id,
                     'nama_gudang' => $item->gudang->nama_gudang,
+                ]
+                : null,
+            'perusahaan_id' => $item->perusahaan_id,
+            'perusahaan' => $item->perusahaan
+                ? [
+                    'id' => $item->perusahaan->id,
+                    'nama_perusahaan' => $item->perusahaan->nama_perusahaan,
+                    'alamat' => $item->perusahaan->alamat,
+                    'nama_pic' => $item->perusahaan->nama_pic,
+                    'tema_invoice' => $item->perusahaan->tema_invoice ?? 'theme_01',
+                    'logo_url' => $item->perusahaan->logo_url,
                 ]
                 : null,
             'nama_barang' => $item->nama_barang,

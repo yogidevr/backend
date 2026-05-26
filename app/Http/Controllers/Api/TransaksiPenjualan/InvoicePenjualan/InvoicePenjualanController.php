@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\TransaksiPenjualan\InvoicePenjualan;
 
 use App\Http\Controllers\Controller;
 use App\Models\MasterData\BankRekening;
-use App\Models\MasterData\Karyawan;
 use App\Models\MasterData\Perusahaan;
 use App\Models\MasterData\Sppg;
 use App\Models\TransaksiPembelian\OrderPenawaranItem;
@@ -115,27 +114,6 @@ class InvoicePenjualanController extends Controller
         ]);
     }
 
-    public function opsiAccounting(): JsonResponse
-    {
-        $options = Karyawan::query()
-            ->where('jabatan', 'like', '%Accounting%')
-            ->whereIn('status', ['aktif', 'Aktif'])
-            ->orderBy('nama')
-            ->get(['id', 'nama', 'jabatan', 'status'])
-            ->map(fn (Karyawan $karyawan): array => [
-                'id' => $karyawan->id,
-                'nama' => $karyawan->nama,
-                'jabatan' => $karyawan->jabatan,
-                'status' => $karyawan->status === 'nonaktif' ? 'non aktif' : $karyawan->status,
-            ])
-            ->values();
-
-        return response()->json([
-            'message' => 'Opsi accounting invoice berhasil diambil.',
-            'data' => $options,
-        ]);
-    }
-
     public function opsiBankRekening(): JsonResponse
     {
         $options = BankRekening::query()
@@ -241,9 +219,9 @@ class InvoicePenjualanController extends Controller
             ],
             'tanggal_kirim' => ['required', 'date'],
             'sppg_id' => ['required', 'integer', 'exists:sppg,id'],
-            'accounting_id' => ['required', 'integer', 'exists:karyawan,id'],
+            'accounting_id' => ['nullable', 'integer'],
             'bank_rekening_id' => ['required', 'integer', 'exists:bank_rekening,id'],
-            'perusahaan_id' => ['required', 'integer', 'exists:perusahaan,id'],
+            'perusahaan_id' => ['nullable', 'integer', 'exists:perusahaan,id'],
             'tanggal_invoice' => ['required', 'date'],
             'status_pembayaran' => ['required', Rule::in(['lunas', 'belum lunas'])],
         ]);
@@ -292,26 +270,15 @@ class InvoicePenjualanController extends Controller
             ]);
         }
 
-        $accounting = Karyawan::query()->findOrFail($payload['accounting_id']);
-        $jabatan = Str::lower($accounting->jabatan ?? '');
-        $status = Str::lower($accounting->status ?? '');
-
-        if (! Str::contains($jabatan, 'accounting') || $status !== 'aktif') {
-            throw ValidationException::withMessages([
-                'accounting_id' => 'Accounting yang dipilih harus karyawan aktif dengan jabatan Accounting.',
-            ]);
-        }
-
         BankRekening::query()->findOrFail($payload['bank_rekening_id']);
-        Perusahaan::query()->findOrFail($payload['perusahaan_id']);
 
         return [
             'nomor_invoice' => $payload['nomor_invoice'],
             'penjualan_id' => $representativePenjualan->id,
             'sppg_id' => $payload['sppg_id'],
-            'accounting_id' => $payload['accounting_id'],
+            'accounting_id' => null,
             'bank_rekening_id' => $payload['bank_rekening_id'],
-            'perusahaan_id' => $payload['perusahaan_id'],
+            'perusahaan_id' => $payload['perusahaan_id'] ?? null,
             'tanggal_invoice' => $payload['tanggal_invoice'],
             'total_tagihan' => $penjualanRecords->sum(
                 fn (Penjualan $penjualan): float => (float) $penjualan->total_harga
@@ -348,7 +315,8 @@ class InvoicePenjualanController extends Controller
             'no_po' => $noPo,
             'sppg_id' => $invoicePenjualan->sppg_id,
             'accounting_id' => $invoicePenjualan->accounting_id,
-            'accounting' => $invoicePenjualan->accounting?->nama,
+            'accounting' => $invoicePenjualan->perusahaan?->nama_pic ?? $invoicePenjualan->accounting?->nama,
+            'pic' => $invoicePenjualan->perusahaan?->nama_pic,
             'bank_rekening_id' => $invoicePenjualan->bank_rekening_id,
             'nama_bank' => $invoicePenjualan->bankRekening?->nama_bank,
             'no_rek' => $invoicePenjualan->bankRekening?->no_rek,
@@ -383,6 +351,14 @@ class InvoicePenjualanController extends Controller
 
                 return $items->map(fn ($item): array => [
                     'id' => $item->id,
+                    'perusahaan_id' => $item->perusahaan_id ?? null,
+                    'perusahaan' => isset($item->perusahaan) && $item->perusahaan ? [
+                        'id' => $item->perusahaan->id,
+                        'nama_perusahaan' => $item->perusahaan->nama_perusahaan,
+                        'nama_pic' => $item->perusahaan->nama_pic,
+                        'tema_invoice' => $item->perusahaan->tema_invoice,
+                        'logo_url' => $item->perusahaan->logo_url,
+                    ] : null,
                     'nama_barang' => $item->nama_barang,
                     'qty' => (float) $item->qty,
                     'satuan' => $item->satuan,
@@ -412,6 +388,8 @@ class InvoicePenjualanController extends Controller
             ->map(function (OrderPenawaranItem $item): object {
                 return (object) [
                     'id' => $item->id,
+                    'perusahaan_id' => null,
+                    'perusahaan' => null,
                     'nama_barang' => $item->nama_barang,
                     'qty' => (float) $item->qty,
                     'satuan' => $item->satuan,
@@ -425,7 +403,7 @@ class InvoicePenjualanController extends Controller
     private function findMatchingPenjualanRecords(string $tanggalKirim, Sppg $sppg): EloquentCollection
     {
         return Penjualan::query()
-            ->with(['items' => fn ($query) => $query->orderBy('id')])
+            ->with(['items' => fn ($query) => $query->with('perusahaan')->orderBy('id')])
             ->whereDate('tanggal', $tanggalKirim)
             ->whereHas('orderPenawaran', function ($query) use ($sppg): void {
                 $query->where('nama_pembeli', $sppg->nama_sppg);

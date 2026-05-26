@@ -3,6 +3,7 @@
 namespace App\Models\TransaksiPenjualan;
 
 use App\Models\MasterData\Gudang;
+use App\Models\MasterData\Perusahaan;
 use App\Models\MasterData\Produk;
 use App\Models\TransaksiPembelian\OrderPenawaranItem;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -20,6 +21,7 @@ class PenjualanItem extends Model
         'order_penawaran_item_id',
         'produk_id',
         'gudang_id',
+        'perusahaan_id',
         'nama_barang',
         'qty',
         'satuan',
@@ -51,5 +53,10 @@ class PenjualanItem extends Model
     public function gudang(): BelongsTo
     {
         return $this->belongsTo(Gudang::class, 'gudang_id');
+    }
+
+    public function perusahaan(): BelongsTo
+    {
+        return $this->belongsTo(Perusahaan::class, 'perusahaan_id');
     }
 }

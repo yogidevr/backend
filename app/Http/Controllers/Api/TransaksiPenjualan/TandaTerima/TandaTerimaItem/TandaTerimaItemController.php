@@ -36,6 +36,7 @@ class TandaTerimaItemController extends Controller
         $currentPage = max((int) $request->query('page', 1), 1);
 
         $items = $tandaTerima->items()
+            ->with('penjualanItem.perusahaan')
             ->when($search, function ($query, string $keyword): void {
                 $query->where(function ($subQuery) use ($keyword): void {
                     $subQuery
@@ -74,7 +75,9 @@ class TandaTerimaItemController extends Controller
 
         return response()->json([
             'message' => 'Data item tanda terima berhasil diambil.',
-            'data' => $paginatedItems->items(),
+            'data' => collect($paginatedItems->items())
+                ->map(fn (TandaTerimaItem $item): array => $this->serializeItem($item))
+                ->values(),
             'meta' => [
                 'current_page' => $paginatedItems->currentPage(),
                 'last_page' => $paginatedItems->lastPage(),
@@ -93,7 +96,7 @@ class TandaTerimaItemController extends Controller
 
         return response()->json([
             'message' => 'Item tanda terima berhasil ditambahkan.',
-            'data' => $item,
+            'data' => $this->serializeItem($item),
         ], 201);
     }
 
@@ -104,7 +107,7 @@ class TandaTerimaItemController extends Controller
 
         return response()->json([
             'message' => 'Detail item tanda terima berhasil diambil.',
-            'data' => $item,
+            'data' => $this->serializeItem($item),
         ]);
     }
 
@@ -116,7 +119,7 @@ class TandaTerimaItemController extends Controller
 
         return response()->json([
             'message' => 'Item tanda terima berhasil diperbarui.',
-            'data' => $item,
+            'data' => $this->serializeItem($item),
         ]);
     }
 
@@ -188,7 +191,32 @@ class TandaTerimaItemController extends Controller
 
         $item->save();
 
-        return $item->fresh();
+        return $item->fresh(['penjualanItem.perusahaan']);
+    }
+
+    private function serializeItem(TandaTerimaItem $item): array
+    {
+        $item->loadMissing('penjualanItem.perusahaan');
+        $perusahaan = $item->penjualanItem?->perusahaan;
+
+        return [
+            'id' => $item->id,
+            'tanda_terima_id' => $item->tanda_terima_id,
+            'penjualan_item_id' => $item->penjualan_item_id,
+            'nama_barang' => $item->nama_barang,
+            'qty' => $item->qty,
+            'satuan' => $item->satuan,
+            'keterangan' => $item->keterangan,
+            'perusahaan_id' => $perusahaan?->id,
+            'perusahaan' => $perusahaan ? [
+                'id' => $perusahaan->id,
+                'nama_perusahaan' => $perusahaan->nama_perusahaan,
+                'alamat' => $perusahaan->alamat,
+                'nama_pic' => $perusahaan->nama_pic,
+                'tema_invoice' => $perusahaan->tema_invoice,
+                'logo_url' => $perusahaan->logo_url,
+            ] : null,
+        ];
     }
 
     private function ensureItemBelongsToTandaTerima(TandaTerima $tandaTerima, TandaTerimaItem $item): void
@@ -297,7 +325,7 @@ class TandaTerimaItemController extends Controller
             : $suratJalan->sppg()->value('nama_sppg');
 
         return Penjualan::query()
-            ->with('items')
+            ->with('items.perusahaan')
             ->whereDate('tanggal', $suratJalan->tanggal)
             ->when($namaSppg, function ($query, string $currentNamaSppg): void {
                 $query->whereHas('orderPenawaran', function ($orderQuery) use ($currentNamaSppg): void {

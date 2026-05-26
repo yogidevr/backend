@@ -4,17 +4,15 @@ namespace App\Http\Controllers\Api\TransaksiPenjualan\SuratJalan;
 
 use App\Http\Controllers\Controller;
 use App\Models\MasterData\Karyawan;
-use App\Models\MasterData\Perusahaan;
 use App\Models\TransaksiPembelian\OrderPenawaranItem;
 use App\Models\TransaksiPenjualan\Penjualan;
 use App\Models\TransaksiPenjualan\SuratJalan;
 use App\Support\CacheInvalidation;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -39,14 +37,12 @@ class SuratJalanController extends Controller
                 'sppg:id,nama_sppg',
                 'armadaRef:id,nama_unit,no_pol',
                 'driver:id,nama',
-                'perusahaanRef:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path',
             ])
             ->when($search, function ($query, string $keyword): void {
                 $query->where(function ($subQuery) use ($keyword): void {
                     $subQuery
                         ->where('nomor_surat_jalan', 'like', '%'.$keyword.'%')
                         ->orWhere('no_po', 'like', '%'.$keyword.'%')
-                        ->orWhereHas('perusahaanRef', fn ($perusahaanQuery) => $perusahaanQuery->where('nama_perusahaan', 'like', '%'.$keyword.'%'))
                         ->orWhereHas('sppg', fn ($sppgQuery) => $sppgQuery->where('nama_sppg', 'like', '%'.$keyword.'%'))
                         ->orWhereHas('driver', fn ($driverQuery) => $driverQuery->where('nama', 'like', '%'.$keyword.'%'));
                 });
@@ -91,18 +87,6 @@ class SuratJalanController extends Controller
         ], 201);
     }
 
-    public function opsiPerusahaan(): JsonResponse
-    {
-        $options = Perusahaan::query()
-            ->orderBy('nama_perusahaan')
-            ->get(['id', 'nama_perusahaan', 'alamat', 'nama_pic', 'tema_invoice', 'logo_path']);
-
-        return response()->json([
-            'message' => 'Opsi perusahaan surat jalan berhasil diambil.',
-            'data' => $options,
-        ]);
-    }
-
     public function show(SuratJalan $suratJalan): JsonResponse
     {
         $this->syncItemsFromPenjualan($suratJalan);
@@ -111,18 +95,12 @@ class SuratJalanController extends Controller
             'sppg:id,nama_sppg',
             'armadaRef:id,nama_unit,no_pol',
             'driver:id,nama',
-            'perusahaanRef:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path',
             'items.penjualanItem',
         ]);
 
-        $perusahaan = $suratJalan->perusahaanRef;
-        $data = $suratJalan->toArray();
-        $data['perusahaan_tema_invoice'] = $perusahaan?->tema_invoice ?? 'theme_01';
-        $data['perusahaan_logo_data_url'] = $this->resolvePerusahaanLogoDataUrl($perusahaan?->getRawOriginal('logo_path'));
-
         return response()->json([
             'message' => 'Detail surat jalan berhasil diambil.',
-            'data' => $data,
+            'data' => $suratJalan->toArray(),
         ]);
     }
 
@@ -140,7 +118,6 @@ class SuratJalanController extends Controller
                 'sppg:id,nama_sppg',
                 'armadaRef:id,nama_unit,no_pol',
                 'driver:id,nama',
-                'perusahaanRef:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path',
                 'items.penjualanItem',
             ]),
         ]);
@@ -170,7 +147,6 @@ class SuratJalanController extends Controller
             'sppg_id' => ['nullable', 'integer', 'exists:sppg,id'],
             'armada_id' => ['nullable', 'integer', 'exists:armada,id'],
             'driver_id' => ['nullable', 'integer', 'exists:karyawan,id'],
-            'perusahaan_id' => ['nullable', 'integer', 'exists:perusahaan,id'],
             'status' => ['required', Rule::in(['draft', 'selesai', 'batal'])],
         ]);
 
@@ -187,24 +163,6 @@ class SuratJalanController extends Controller
         }
 
         return $payload;
-    }
-
-    private function resolvePerusahaanLogoDataUrl(?string $logoPath): ?string
-    {
-        if (! $logoPath || ! Storage::disk('public')->exists($logoPath)) {
-            return null;
-        }
-
-        $extension = Str::lower(pathinfo($logoPath, PATHINFO_EXTENSION));
-        $mime = match ($extension) {
-            'jpg', 'jpeg' => 'image/jpeg',
-            'webp' => 'image/webp',
-            default => 'image/png',
-        };
-
-        $binary = Storage::disk('public')->get($logoPath);
-
-        return 'data:'.$mime.';base64,'.base64_encode($binary);
     }
 
     private function syncItemsFromPenjualan(SuratJalan $suratJalan): void

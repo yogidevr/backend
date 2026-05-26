@@ -7,6 +7,7 @@ use App\Models\MasterData\Perusahaan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Http\StreamedResponse;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -116,7 +117,7 @@ class PerusahaanController extends Controller
         ]);
     }
 
-    public function logo(Perusahaan $perusahaan): HttpResponse|JsonResponse
+    public function logo(Perusahaan $perusahaan): HttpResponse|JsonResponse|StreamedResponse
     {
         $path = $perusahaan->getRawOriginal('logo_path');
         if (! $path || ! Storage::disk('public')->exists($path)) {
