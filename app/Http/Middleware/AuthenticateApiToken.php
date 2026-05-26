@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Models\UserApiToken;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,18 +21,25 @@ class AuthenticateApiToken
 
         $hashedToken = hash('sha256', $plainToken);
 
-        $user = User::query()->where('api_token', $hashedToken)->first();
+        $apiToken = UserApiToken::query()
+            ->with('user')
+            ->where('token_hash', $hashedToken)
+            ->whereNull('revoked_at')
+            ->first();
 
-        if (! $user) {
+        if (! $apiToken || ! $apiToken->user) {
             return $this->unauthenticatedResponse();
         }
 
-        if ($user->api_token_expires_at === null || $user->api_token_expires_at->isPast()) {
-            $user->revokeApiToken();
+        if ($apiToken->expires_at === null || $apiToken->expires_at->isPast()) {
+            $apiToken->update(['revoked_at' => now()]);
 
             return $this->unauthenticatedResponse('Token telah kedaluwarsa. Silakan login kembali.');
         }
 
+        $user = $apiToken->user;
+        $request->attributes->set('api_token_hash', $hashedToken);
+        $request->attributes->set('api_token_id', $apiToken->id);
         $request->setUserResolver(fn (): User => $user);
 
         return $next($request);

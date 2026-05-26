@@ -140,8 +140,7 @@ class UserController extends Controller
 
         if (!empty($validated['password'])) {
             $user->password = $validated['password'];
-            $user->api_token = null;
-            $user->api_token_expires_at = null;
+            $user->revokeAllApiTokens();
         }
 
         $user->save();

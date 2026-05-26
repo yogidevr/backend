@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MasterData\Perusahaan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -112,6 +113,33 @@ class PerusahaanController extends Controller
 
         return response()->json([
             'message' => 'Perusahaan berhasil dihapus.',
+        ]);
+    }
+
+    public function logo(Perusahaan $perusahaan): HttpResponse|JsonResponse
+    {
+        $path = $perusahaan->getRawOriginal('logo_path');
+        if (! $path || ! Storage::disk('public')->exists($path)) {
+            return response()->json([
+                'message' => 'Logo tidak ditemukan.',
+            ], 404);
+        }
+
+        $mime = Storage::disk('public')->mimeType($path) ?: 'application/octet-stream';
+        $stream = Storage::disk('public')->readStream($path);
+
+        if ($stream === false) {
+            return response()->json([
+                'message' => 'Gagal membaca logo.',
+            ], 500);
+        }
+
+        return response()->stream(function () use ($stream): void {
+            fpassthru($stream);
+            fclose($stream);
+        }, 200, [
+            'Content-Type' => $mime,
+            'Cache-Control' => 'public, max-age=86400',
         ]);
     }
 

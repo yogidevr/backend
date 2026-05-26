@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\UserApiToken;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,12 +43,16 @@ class AuthController extends Controller
 
         RateLimiter::clear($throttleKey);
         $plainToken = $user->issueApiToken();
+        $tokenHash = hash('sha256', $plainToken);
+        $issuedToken = UserApiToken::query()
+            ->where('token_hash', $tokenHash)
+            ->first();
 
         return response()->json([
             'message' => 'Login berhasil.',
             'token' => $plainToken,
             'token_type' => 'Bearer',
-            'expires_at' => optional($user->fresh()->api_token_expires_at)?->toIso8601String(),
+            'expires_at' => optional($issuedToken?->expires_at)?->toIso8601String(),
             'user' => $this->formatUser($user->fresh()),
         ]);
     }
@@ -67,7 +72,11 @@ class AuthController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        $user->revokeApiToken();
+        $tokenHash = (string) $request->attributes->get('api_token_hash', '');
+
+        if ($tokenHash !== '') {
+            $user->revokeApiTokenByHash($tokenHash);
+        }
 
         return response()->json([
             'message' => 'Logout berhasil.',
@@ -93,8 +102,7 @@ class AuthController extends Controller
 
         if (! empty($validated['password'])) {
             $user->password = $validated['password'];
-            $user->api_token = null;
-            $user->api_token_expires_at = null;
+            $user->revokeAllApiTokens();
         }
 
         $user->save();

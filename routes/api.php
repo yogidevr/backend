@@ -54,6 +54,8 @@ Route::prefix('auth')->group(function (): void {
     });
 });
 
+Route::get('perusahaan/{perusahaan}/logo', [PerusahaanController::class, 'logo']);
+
 Route::middleware(['auth.api', 'activity.log'])->group(function (): void {
     Route::get('activity-logs', [ActivityLogController::class, 'index']);
 

@@ -6,7 +6,6 @@ use Database\Factories\PerusahaanFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Request;
-use Illuminate\Support\Facades\Storage;
 
 class Perusahaan extends Model
 {
@@ -38,16 +37,14 @@ class Perusahaan extends Model
 
     public function getLogoUrlAttribute(): ?string
     {
-        $path = $this->attributes['logo_path'] ?? null;
-
-        if (! $path) {
+        if (empty($this->attributes['logo_path']) || empty($this->attributes['id'])) {
             return null;
         }
 
         $request = Request::instance();
         $baseUrl = $request ? $request->getSchemeAndHttpHost() : rtrim((string) config('app.url'), '/');
 
-        return rtrim($baseUrl, '/').'/storage/'.$path;
+        return rtrim($baseUrl, '/').'/api/perusahaan/'.$this->attributes['id'].'/logo';
     }
 
     protected static function newFactory(): PerusahaanFactory

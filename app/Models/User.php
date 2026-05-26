@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\PermissionCatalog;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -61,27 +62,48 @@ class User extends Authenticatable
     public function issueApiToken(): string
     {
         $plainToken = Str::random(60);
+        $expiresAt = now()->addHours(8);
 
-        $this->forceFill([
-            'api_token' => hash('sha256', $plainToken),
-            'api_token_expires_at' => now()->addHours(8),
-        ])->save();
+        $this->apiTokens()->create([
+            'token_hash' => hash('sha256', $plainToken),
+            'expires_at' => $expiresAt,
+            'revoked_at' => null,
+        ]);
 
         return $plainToken;
     }
 
     public function revokeApiToken(): void
     {
-        $this->forceFill([
-            'api_token' => null,
-            'api_token_expires_at' => null,
-        ])->save();
+        $this->apiTokens()
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
+    }
+
+    public function revokeApiTokenByHash(string $hashedToken): void
+    {
+        $this->apiTokens()
+            ->where('token_hash', $hashedToken)
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
+    }
+
+    public function revokeAllApiTokens(): void
+    {
+        $this->apiTokens()
+            ->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
     }
 
     public function permissions(): BelongsToMany
     {
         return $this->belongsToMany(Permission::class, 'user_permissions')
             ->withTimestamps();
+    }
+
+    public function apiTokens(): HasMany
+    {
+        return $this->hasMany(UserApiToken::class, 'user_id');
     }
 
     public function hasRole(string $role): bool
