@@ -314,10 +314,11 @@ Route::middleware(['auth.api', 'activity.log'])->group(function (): void {
         Route::get('penjualan/{penjualan}/items', [PenjualanItemController::class, 'index']);
         Route::get('penjualan/{penjualan}/items/{item}', [PenjualanItemController::class, 'show']);
     });
-    Route::middleware('permission:penjualan.penjualan.create')->group(function (): void {
-        Route::apiResource('penjualan', PenjualanController::class)->only(['store']);
-        Route::post('penjualan/{penjualan}/items', [PenjualanItemController::class, 'store']);
-    });
+      Route::middleware('permission:penjualan.penjualan.create')->group(function (): void {
+          Route::apiResource('penjualan', PenjualanController::class)->only(['store']);
+          Route::post('penjualan/{penjualan}/items/import-order-item', [PenjualanItemController::class, 'importFromOrder']);
+          Route::post('penjualan/{penjualan}/items', [PenjualanItemController::class, 'store']);
+      });
     Route::middleware('permission:penjualan.penjualan.update')->group(function (): void {
         Route::apiResource('penjualan', PenjualanController::class)->only(['update']);
         Route::put('penjualan/{penjualan}/items/{item}', [PenjualanItemController::class, 'update']);

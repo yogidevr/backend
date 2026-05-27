@@ -34,53 +34,12 @@ class PenjualanItemController extends Controller
         $perPage = $filters['per_page'] ?? 10;
         $currentPage = max((int) $request->query('page', 1), 1);
 
-        $items = $penjualan->items()
+        $storedItems = $penjualan->items()
             ->with(['gudang', 'perusahaan:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path'])
-            ->when($search, function ($query, string $keyword): void {
-                $query->where('nama_barang', 'like', '%'.$keyword.'%');
-            })
             ->orderBy('id')
-            ->get()
-            ->map(fn (PenjualanItem $item): array => $this->serializeItem($item))
-            ->values();
+            ->get();
 
-        if ($items->isEmpty() && $penjualan->order_penawaran_id !== null) {
-            $items = OrderPenawaranItem::query()
-                ->where('order_penawaran_id', $penjualan->order_penawaran_id)
-                ->when($search, function ($query, string $keyword): void {
-                    $query->where('nama_barang', 'like', '%'.$keyword.'%');
-                })
-                ->orderBy('id')
-                ->get()
-                ->map(function (OrderPenawaranItem $item): array {
-                    return [
-                        'id' => $item->id,
-                        'penjualan_id' => null,
-                        'order_penawaran_item_id' => $item->id,
-                        'produk_id' => $item->produk_id,
-                        'gudang_id' => null,
-                        'perusahaan_id' => null,
-                        'perusahaan' => null,
-                        'gudang' => null,
-                        'nama_barang' => $item->nama_barang,
-                        'qty' => $item->qty,
-                        'satuan' => $item->satuan,
-                        'harga_satuan' => $item->harga_satuan,
-                        'total_harga' => number_format((float) $item->qty * (float) $item->harga_satuan, 2, '.', ''),
-                        'keterangan' => $item->keterangan,
-                        'stok_tersedia' => number_format(
-                            $this->resolveAvailableStock($item->nama_barang, null),
-                            2,
-                            '.',
-                            ''
-                        ),
-                        'status_stok' => $this->resolveAvailableStock($item->nama_barang, null) >= (float) $item->qty
-                            ? 'berhasil'
-                            : 'pending',
-                    ];
-                })
-                ->values();
-        }
+        $items = $this->buildIndexItems($penjualan, $storedItems, $search);
 
         $items = $items
             ->sort(function (array $first, array $second) use ($sortField, $sortOrder): int {
@@ -139,6 +98,63 @@ class PenjualanItemController extends Controller
         return response()->json([
             'message' => 'Item penjualan berhasil ditambahkan.',
             'data' => $this->serializeItem($item->load(['gudang', 'perusahaan:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path'])),
+        ], 201);
+    }
+
+    public function importFromOrder(Request $request, Penjualan $penjualan): JsonResponse
+    {
+        $payload = $request->validate([
+            'order_penawaran_item_id' => ['required', 'integer', 'exists:order_penawaran_items,id'],
+        ]);
+
+        $sourceItem = OrderPenawaranItem::query()
+            ->with('orderPenawaran:id,tanggal_dikirim')
+            ->findOrFail($payload['order_penawaran_item_id']);
+
+        $belongsToSameSource = $penjualan->order_penawaran_id !== null
+            ? $sourceItem->order_penawaran_id === $penjualan->order_penawaran_id
+            : $sourceItem->orderPenawaran !== null && $sourceItem->orderPenawaran->tanggal_dikirim === $penjualan->tanggal->format('Y-m-d');
+
+        if (! $belongsToSameSource) {
+            throw ValidationException::withMessages([
+                'order_penawaran_item_id' => 'Barang hanya boleh diambil dari order penawaran sumber penjualan yang sama.',
+            ]);
+        }
+
+        $item = DB::transaction(function () use ($penjualan, $sourceItem): PenjualanItem {
+            $existingItem = PenjualanItem::query()
+                ->where('penjualan_id', $penjualan->id)
+                ->where('order_penawaran_item_id', $sourceItem->id)
+                ->first();
+
+            if ($existingItem instanceof PenjualanItem) {
+                return $existingItem->load(['gudang', 'perusahaan:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path']);
+            }
+
+            $item = new PenjualanItem();
+            $item->fill([
+                'penjualan_id' => $penjualan->id,
+                'order_penawaran_item_id' => $sourceItem->id,
+                'produk_id' => $sourceItem->produk_id,
+                'gudang_id' => null,
+                'perusahaan_id' => null,
+                'nama_barang' => $sourceItem->nama_barang,
+                'qty' => $sourceItem->qty,
+                'satuan' => $sourceItem->satuan,
+                'harga_satuan' => $sourceItem->harga_satuan,
+                'total_harga' => (float) $sourceItem->qty * (float) $sourceItem->harga_satuan,
+            ]);
+            $item->save();
+
+            $this->refreshParentTotal($penjualan);
+
+            return $item->fresh(['gudang', 'perusahaan:id,nama_perusahaan,alamat,nama_pic,tema_invoice,logo_path']);
+        });
+        CacheInvalidation::flushFinancialCaches();
+
+        return response()->json([
+            'message' => 'Item dari order penawaran berhasil ditambahkan ke penjualan.',
+            'data' => $this->serializeItem($item),
         ], 201);
     }
 
@@ -233,8 +249,8 @@ class PenjualanItemController extends Controller
     {
         $payload = $request->validate([
             'order_penawaran_item_id' => ['required', 'integer', 'exists:order_penawaran_items,id'],
-            'gudang_id' => ['required', 'integer', 'exists:gudang,id'],
-            'perusahaan_id' => ['required', 'integer', 'exists:perusahaan,id'],
+            'gudang_id' => ['nullable', 'integer', 'exists:gudang,id'],
+            'perusahaan_id' => ['nullable', 'integer', 'exists:perusahaan,id'],
             'qty' => ['required', 'numeric', 'gt:0'],
         ]);
 
@@ -347,5 +363,77 @@ class PenjualanItemController extends Controller
             ->sum('qty');
 
         return (float) $stokBasah + (float) $stokKering;
+    }
+
+    /**
+     * @param \Illuminate\Support\Collection<int, PenjualanItem> $storedItems
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function buildIndexItems(Penjualan $penjualan, Collection $storedItems, ?string $search): Collection
+    {
+        $storedItemsBySource = $storedItems
+            ->filter(fn (PenjualanItem $item): bool => $item->order_penawaran_item_id !== null)
+            ->keyBy('order_penawaran_item_id');
+
+        if ($penjualan->order_penawaran_id === null) {
+            return $storedItems
+                ->when($search, function (Collection $collection) use ($search): Collection {
+                    return $collection->filter(function (PenjualanItem $item) use ($search): bool {
+                        return str_contains(mb_strtolower($item->nama_barang), mb_strtolower($search));
+                    });
+                })
+                ->map(fn (PenjualanItem $item): array => $this->serializeItem($item))
+                ->values();
+        }
+
+        $sourceItems = OrderPenawaranItem::query()
+            ->where('order_penawaran_id', $penjualan->order_penawaran_id)
+            ->when($search, function ($query, string $keyword): void {
+                $query->where('nama_barang', 'like', '%'.$keyword.'%');
+            })
+            ->orderBy('id')
+            ->get()
+            ->map(function (OrderPenawaranItem $sourceItem) use ($storedItemsBySource): array {
+                /** @var PenjualanItem|null $storedItem */
+                $storedItem = $storedItemsBySource->get($sourceItem->id);
+
+                if ($storedItem instanceof PenjualanItem) {
+                    return $this->serializeItem($storedItem);
+                }
+
+                $stokTersedia = $this->resolveAvailableStock($sourceItem->nama_barang, null);
+
+                return [
+                    'id' => $sourceItem->id,
+                    'penjualan_id' => null,
+                    'order_penawaran_item_id' => $sourceItem->id,
+                    'produk_id' => $sourceItem->produk_id,
+                    'gudang_id' => null,
+                    'perusahaan_id' => null,
+                    'perusahaan' => null,
+                    'gudang' => null,
+                    'nama_barang' => $sourceItem->nama_barang,
+                    'qty' => number_format((float) $sourceItem->qty, 2, '.', ''),
+                    'satuan' => $sourceItem->satuan,
+                    'harga_satuan' => number_format((float) $sourceItem->harga_satuan, 2, '.', ''),
+                    'total_harga' => number_format((float) $sourceItem->qty * (float) $sourceItem->harga_satuan, 2, '.', ''),
+                    'keterangan' => $sourceItem->keterangan,
+                    'stok_tersedia' => number_format($stokTersedia, 2, '.', ''),
+                    'status_stok' => $stokTersedia >= (float) $sourceItem->qty ? 'berhasil' : 'pending',
+                ];
+            })
+            ->values();
+
+        $manualItems = $storedItems
+            ->filter(fn (PenjualanItem $item): bool => $item->order_penawaran_item_id === null)
+            ->when($search, function (Collection $collection) use ($search): Collection {
+                return $collection->filter(function (PenjualanItem $item) use ($search): bool {
+                    return str_contains(mb_strtolower($item->nama_barang), mb_strtolower($search));
+                });
+            })
+            ->map(fn (PenjualanItem $item): array => $this->serializeItem($item))
+            ->values();
+
+        return $sourceItems->concat($manualItems)->values();
     }
 }
