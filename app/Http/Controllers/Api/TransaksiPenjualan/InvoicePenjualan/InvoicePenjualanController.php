@@ -358,6 +358,7 @@ class InvoicePenjualanController extends Controller
                         'nama_pic' => $item->perusahaan->nama_pic,
                         'tema_invoice' => $item->perusahaan->tema_invoice,
                         'logo_url' => $item->perusahaan->logo_url,
+                        'logo_data_url' => $this->resolvePerusahaanLogoDataUrl($item->perusahaan->getRawOriginal('logo_path')),
                     ] : null,
                     'nama_barang' => $item->nama_barang,
                     'qty' => (float) $item->qty,

@@ -10,9 +10,11 @@ use App\Models\TransaksiPenjualan\SuratJalan;
 use App\Models\TransaksiPenjualan\TandaTerima;
 use App\Models\TransaksiPenjualan\TandaTerimaItem;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 
@@ -215,8 +217,27 @@ class TandaTerimaItemController extends Controller
                 'nama_pic' => $perusahaan->nama_pic,
                 'tema_invoice' => $perusahaan->tema_invoice,
                 'logo_url' => $perusahaan->logo_url,
+                'logo_data_url' => $this->resolvePerusahaanLogoDataUrl($perusahaan->getRawOriginal('logo_path')),
             ] : null,
         ];
+    }
+
+    private function resolvePerusahaanLogoDataUrl(?string $logoPath): ?string
+    {
+        if (! $logoPath || ! Storage::disk('public')->exists($logoPath)) {
+            return null;
+        }
+
+        $extension = Str::lower(pathinfo($logoPath, PATHINFO_EXTENSION));
+        $mime = match ($extension) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'webp' => 'image/webp',
+            default => 'image/png',
+        };
+
+        $binary = Storage::disk('public')->get($logoPath);
+
+        return 'data:'.$mime.';base64,'.base64_encode($binary);
     }
 
     private function ensureItemBelongsToTandaTerima(TandaTerima $tandaTerima, TandaTerimaItem $item): void

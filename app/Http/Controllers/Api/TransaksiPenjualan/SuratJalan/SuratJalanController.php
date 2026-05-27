@@ -18,6 +18,27 @@ use Illuminate\Validation\ValidationException;
 
 class SuratJalanController extends Controller
 {
+    public function opsiDriver(): JsonResponse
+    {
+        $drivers = Karyawan::query()
+            ->where('jabatan', 'like', '%Driver%')
+            ->whereRaw('LOWER(status) = ?', ['aktif'])
+            ->orderBy('nama')
+            ->get(['id', 'nama', 'jabatan', 'status'])
+            ->map(fn (Karyawan $driver): array => [
+                'id' => $driver->id,
+                'nama' => $driver->nama,
+                'jabatan' => $driver->jabatan,
+                'status' => Str::lower($driver->status ?? ''),
+            ])
+            ->values();
+
+        return response()->json([
+            'message' => 'Opsi driver surat jalan berhasil diambil.',
+            'data' => $drivers,
+        ]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $filters = $request->validate([

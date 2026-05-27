@@ -7,10 +7,10 @@ use App\Models\MasterData\Perusahaan;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
-use Illuminate\Http\StreamedResponse;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PerusahaanController extends Controller
 {
@@ -189,9 +189,31 @@ class PerusahaanController extends Controller
         }
 
         $file = $request->file('logo');
-        $extension = $file->getClientOriginalExtension();
-        $filename = now()->format('YmdHis').'_'.Str::random(10).'.'.$extension;
+        if (! $file->isValid()) {
+            abort(response()->json([
+                'message' => 'File logo gagal diupload. Silakan pilih file logo yang valid.',
+                'errors' => [
+                    'logo' => ['File logo gagal diupload. Silakan pilih file logo yang valid.'],
+                ],
+            ], 422));
+        }
 
-        return $file->storeAs('perusahaan-logo', $filename, 'public');
+        $extension = $file->getClientOriginalExtension() ?: $file->extension() ?: 'png';
+        $filename = now()->format('YmdHis').'_'.Str::random(10).'.'.$extension;
+        $disk = Storage::disk('public');
+        $disk->makeDirectory('perusahaan-logo');
+
+        $path = $disk->putFileAs('perusahaan-logo', $file, $filename);
+
+        if ($path === false) {
+            abort(response()->json([
+                'message' => 'Logo gagal disimpan ke storage.',
+                'errors' => [
+                    'logo' => ['Logo gagal disimpan ke storage.'],
+                ],
+            ], 500));
+        }
+
+        return $path;
     }
 }

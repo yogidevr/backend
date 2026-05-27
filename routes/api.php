@@ -328,6 +328,7 @@ Route::middleware(['auth.api', 'activity.log'])->group(function (): void {
     });
 
     Route::middleware('permission:penjualan.surat_jalan.view')->group(function (): void {
+        Route::get('surat-jalan/opsi-driver', [SuratJalanController::class, 'opsiDriver']);
         Route::apiResource('surat-jalan', SuratJalanController::class)->only(['index', 'show']);
         Route::get('surat-jalan/{suratJalan}/opsi-barang', [SuratJalanItemController::class, 'opsiBarang']);
         Route::get('surat-jalan/{suratJalan}/items', [SuratJalanItemController::class, 'index']);
